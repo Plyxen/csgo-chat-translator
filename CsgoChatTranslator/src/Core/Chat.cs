@@ -58,6 +58,28 @@ public static partial class ChatParser
         return false;
     }
 
+    // Common Russian words as players type them in Latin letters. None of them is an English word.
+    private static readonly HashSet<string> LatinRussianWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "privet", "zdarova", "zdorova", "poka", "spasibo", "pozhaluista", "pojaluista", "kak", "dela", "chto", "cho",
+        "kto", "gde", "kogda", "pochemu", "zachem", "davai", "davay", "poshel", "poshli", "idi", "idem", "pognali",
+        "bratan", "pacani", "pacany", "rebyata", "tebya", "tebe", "menya", "mne", "eto", "etot", "tak", "vot", "nado",
+        "mozhno", "nelzya", "horosho", "xorosho", "ploho", "normalno", "krasava", "molodec", "znayu", "znaesh", "ponyal",
+        "ponyatno", "ladno", "konechno", "tolko", "esche", "uzhe", "ochen", "bolshe", "seichas", "seychas", "potom",
+        "zdes", "pochti", "vsem", "vse", "vsegda", "nikogda", "igra", "igrat", "igraem", "chiter", "chiti", "admina",
+        "zabanit", "zaban", "kikni", "ubil", "ubei", "begi", "stoi", "smotri", "slushai", "govori", "skazhi", "russki",
+        "russkiy", "nichego", "nichevo", "blin", "kruto", "bistro", "bystro", "odin", "dva", "tri",
+        "nety", "netu", "est", "budet", "budu", "hochu", "xochu", "mogu", "mozhesh", "delat", "delaesh", "igraesh",
+    };
+
+    /// <summary>Guesses whether a message without Cyrillic is Russian typed in Latin letters.</summary>
+    public static bool LooksLikeLatinRussian(string text)
+    {
+        var words = text.Split([' ', ',', '.', '!', '?', ')', '(', ':', ';'], StringSplitOptions.RemoveEmptyEntries);
+        var hits = words.Distinct(StringComparer.OrdinalIgnoreCase).Count(LatinRussianWords.Contains);
+        return hits >= 2 || (hits == 1 && words.Length <= 2);
+    }
+
     public static string Clean(string value)
     {
         var sb = new StringBuilder(value.Length);

@@ -8,6 +8,8 @@ A small Windows tray app for the legacy CS:GO client (Steam app 4465480) on Russ
 
 Nothing is injected into the game. The app only reads the log file and talks to the game's own network console on `127.0.0.1`.
 
+It works out of the box for free, with no account or key. Adding a Claude Haiku key makes the translations noticeably better, but it is an optional extra, not a requirement.
+
 ## Setup
 
 1. Run `CsgoChatTranslator.exe`. It sits in the system tray.
@@ -31,13 +33,30 @@ If the game is not connected, the translated text is copied to the clipboard so 
 
 ## Translation
 
-Free web endpoints, no key or account: two Google Translate routes and MyMemory. If one refuses a request, the next is tried. If none answers, incoming lines are shown in Russian marked "not translated" (flagged words are still explained, because the glossary is local) and outgoing messages are not sent.
+### Free routes: the default, nothing to set up
 
-Machine translation is weak on slang and tends to soften insults. Treat the flagged-word line, not the translated sentence, as the record of what was said.
+Web endpoints that need no key or account: two Google Translate routes and MyMemory. If one refuses a request, the next is tried. If none answers, incoming lines are shown in Russian marked "not translated" (flagged words are still explained, because the glossary is local) and outgoing messages are not sent.
+
+This is enough to follow the chat and to be understood. Its weak spots are slang and tone: free machine translation tends to garble shorthand and soften insults, which is why the flagged-word line exists.
+
+### Claude Haiku: optional, good to have
+
+You do not need this. The app is fully usable without it, and if a key is missing, rejected, out of credit, or the API is unreachable, the app quietly uses the free routes.
+
+If you want better translations, paste an Anthropic API key under **Better translations** in the status window. Chat is then translated with `claude-haiku-5-5` first, and the free routes become the fallback. What you gain:
+
+- Slang, typos and shorthand are understood (`хз че он творит, изи катка` becomes "idk what he's doing, easy game").
+- Insults stay as rude as they were written.
+- Russian typed in Latin letters (`privet kak dela`) is translated, not only flagged.
+- Your own messages come out in natural player Russian.
+
+It uses the pay-as-you-go Anthropic API, not a Claude subscription. A chat line costs roughly $0.00004 and takes under a second, so a few dollars of prepaid credit lasts months. The key is stored encrypted for your Windows user in the settings file, outside this repository (or read from `ANTHROPIC_API_KEY`).
+
+Either way, treat the flagged-word line, not the translated sentence, as the record of what was said.
 
 ## Build
 
-Requires the .NET 10 SDK. No NuGet packages.
+Requires the .NET 10 SDK. One NuGet package: the official `Anthropic` SDK, pinned.
 
 ```powershell
 dotnet publish CsgoChatTranslator -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist

@@ -13,6 +13,6 @@ internal static class Program
         if (!isFirstInstance) return;
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApp(Settings.Load(directory), args.Contains("--quiet")));
+        Application.Run(new TrayApp(Settings.Load(directory), args.Contains("--quiet"), args.Contains("--setup")));
     }
 }

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace CsgoChatTranslator;
@@ -17,8 +18,39 @@ public sealed class Settings
     public int MessageSeconds { get; set; } = 14;
     public int? OverlayX { get; set; }
     public int? OverlayY { get; set; }
+    public string AiModel { get; set; } = "claude-haiku-5-5";
+
+    /// <summary>The Anthropic API key, encrypted for this Windows user. Never stored as plain text.</summary>
+    public string? ApiKeyProtected { get; set; }
 
     private string _file = "";
+
+    public string? GetApiKey()
+    {
+        if (!string.IsNullOrWhiteSpace(ApiKeyProtected))
+        {
+            try
+            {
+                var bytes = ProtectedData.Unprotect(Convert.FromBase64String(ApiKeyProtected), null, DataProtectionScope.CurrentUser);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch (Exception e) when (e is CryptographicException or FormatException)
+            {
+                // Copied from another PC or user: unreadable here, so treat it as missing.
+            }
+        }
+
+        var fromEnvironment = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY");
+        return string.IsNullOrWhiteSpace(fromEnvironment) ? null : fromEnvironment.Trim();
+    }
+
+    public void SetApiKey(string? key)
+    {
+        ApiKeyProtected = string.IsNullOrWhiteSpace(key)
+            ? null
+            : Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(key.Trim()), null, DataProtectionScope.CurrentUser));
+        Save();
+    }
 
     public static string DefaultDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CsgoChatTranslator");

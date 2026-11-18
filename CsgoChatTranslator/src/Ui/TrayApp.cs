@@ -15,7 +15,7 @@ public sealed class TrayApp : ApplicationContext
     private readonly ToolStripMenuItem _moveItem;
     private readonly bool _hotkeyRegistered;
 
-    public TrayApp(Settings settings, bool quiet)
+    public TrayApp(Settings settings, bool quiet, bool showSetup = false)
     {
         _settings = settings;
         _overlay = new OverlayForm(settings);
@@ -27,6 +27,7 @@ public sealed class TrayApp : ApplicationContext
         _engine.StatusChanged += () => OnUi(RefreshStatus);
         _engine.CopyRequested += text => OnUi(() => CopyToClipboard(text));
         _compose.Submitted += _engine.Send;
+        _status.ApiKeySubmitted += _engine.SetApiKey;
 
         var writeItem = new ToolStripMenuItem($"Write a message ({settings.Hotkey})", null, (_, _) => _compose.Open());
         var statusItem = new ToolStripMenuItem("Status and setup", null, (_, _) => ShowStatus());
@@ -58,7 +59,7 @@ public sealed class TrayApp : ApplicationContext
         RefreshStatus();
 
         var ready = SteamInfo.HasLaunchOptions(SteamInfo.ReadLaunchOptions(), settings.NetconPort, settings.NetconPassword);
-        if (!ready && !quiet) ShowStatus();
+        if (showSetup || (!ready && !quiet)) ShowStatus();
         _overlay.Add(OverlayEntry.Notice(_hotkeyRegistered
             ? $"Chat translator is on. Press {settings.Hotkey} to write."
             : $"Chat translator is on, but {settings.Hotkey} is taken. Use the tray icon to write."));
@@ -82,8 +83,7 @@ public sealed class TrayApp : ApplicationContext
     private void ShowStatus()
     {
         RefreshStatus();
-        _status.Show();
-        _status.Activate();
+        _status.ShowInFront();
     }
 
     private void ToggleMove()

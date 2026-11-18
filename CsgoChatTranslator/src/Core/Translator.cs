@@ -34,12 +34,53 @@ public sealed class Translator : IDisposable
     /// <summary>The route that answered last, for the status window.</summary>
     public string LastRoute { get; private set; } = Routes[0].Name;
 
-    public async Task<string> TranslateAsync(string text, string from, string to, CancellationToken ct)
+    private volatile AiTranslator? _ai;
+
+    public AiState AiState => _ai?.State ?? AiState.NoKey;
+
+    /// <summary>True when a Claude key is set and has not been rejected.</summary>
+    public bool AiReady => _ai is { Usable: true };
+
+    public void SetApiKey(string? apiKey, string model)
+    {
+        _ai = string.IsNullOrWhiteSpace(apiKey) ? null : new AiTranslator(apiKey, model);
+        lock (_cache) _cache.Clear();
+    }
+
+    /// <param name="incoming">True for players' chat, false for the admin's own messages.</param>
+    /// <param name="aiOnly">For text the free routes cannot read, such as Russian in Latin letters.</param>
+    public async Task<string> TranslateAsync(
+        string text, string from, string to, CancellationToken ct, bool incoming = true, bool aiOnly = false)
     {
         var key = $"{from}>{to}:{text}";
         lock (_cache)
         {
             if (_cache.TryGetValue(key, out var cached)) return cached;
+        }
+
+        var ai = _ai;
+        if (ai is { Usable: true })
+        {
+            try
+            {
+                var result = await ai.TranslateAsync(text, from, to, incoming, ct);
+                LastRoute = "Claude";
+                Remember(key, result);
+                return result;
+            }
+            catch (AiUnavailableException e) when (!aiOnly)
+            {
+                // Fall through to the free routes below.
+                _ = e;
+            }
+            catch (AiUnavailableException e)
+            {
+                throw new TranslationFailedException("Claude could not translate this message.", e);
+            }
+        }
+        else if (aiOnly)
+        {
+            throw new TranslationFailedException("No Claude key is set.");
         }
 
         var (q, sl, tl) = (Uri.EscapeDataString(text), Uri.EscapeDataString(from), Uri.EscapeDataString(to));
@@ -58,11 +99,7 @@ public sealed class Translator : IDisposable
 
                 _preferred = index;
                 LastRoute = route.Name;
-                lock (_cache)
-                {
-                    if (_cache.Count >= MaxCacheEntries) _cache.Clear();
-                    _cache[key] = result;
-                }
+                Remember(key, result);
                 return result;
             }
             catch (Exception e) when (!ct.IsCancellationRequested &&
@@ -72,6 +109,15 @@ public sealed class Translator : IDisposable
             }
         }
         throw new TranslationFailedException("No translation service answered.", last);
+    }
+
+    private void Remember(string key, string result)
+    {
+        lock (_cache)
+        {
+            if (_cache.Count >= MaxCacheEntries) _cache.Clear();
+            _cache[key] = result;
+        }
     }
 
     /// <summary>[[["Hello","привет",...],...],...]</summary>

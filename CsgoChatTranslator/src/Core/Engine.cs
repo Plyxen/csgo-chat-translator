@@ -36,6 +36,32 @@ public sealed class Engine : IDisposable
         _settings = settings;
         _console = new GameConsole(settings.NetconPort, settings.NetconPassword);
         _console.StateChanged += () => StatusChanged?.Invoke();
+        _translator.SetApiKey(settings.GetApiKey(), settings.AiModel);
+    }
+
+    public AiState Ai => _translator.AiState;
+    public string TranslatorRoute => _translator.LastRoute;
+
+    /// <summary>Stores a new Claude API key (or removes it when empty) and checks it with one tiny request.</summary>
+    public void SetApiKey(string? key)
+    {
+        _settings.SetApiKey(key);
+        _translator.SetApiKey(_settings.GetApiKey(), _settings.AiModel);
+        StatusChanged?.Invoke();
+        if (_translator.AiReady) _ = Task.Run(CheckAiAsync);
+    }
+
+    private async Task CheckAiAsync()
+    {
+        try
+        {
+            await _translator.TranslateAsync("привет", "ru", "en", _stop.Token, aiOnly: true);
+        }
+        catch (Exception e) when (e is TranslationFailedException or OperationCanceledException)
+        {
+            // The state on the translator already says why.
+        }
+        StatusChanged?.Invoke();
     }
 
     public event Action<OverlayEntry>? EntryAdded;
@@ -96,7 +122,11 @@ public sealed class Engine : IDisposable
         if (chat is null) return;
 
         // Russian in Latin letters ("cyka blyat") has no Cyrillic but still matters to an admin.
-        if (!ChatParser.HasCyrillic(chat.Text) && Profanity.Describe(chat.Text) is null) return;
+        if (!ChatParser.HasCyrillic(chat.Text) && Profanity.Describe(chat.Text) is null &&
+            !(_translator.AiReady && ChatParser.LooksLikeLatinRussian(chat.Text)))
+        {
+            return;
+        }
         if (IsOwnEcho(chat.Text)) return;
 
         // The same message can be printed twice when a server chat plugin is active.
@@ -131,8 +161,18 @@ public sealed class Engine : IDisposable
                 var flagged = Profanity.Describe(chat.Text);
                 if (!ChatParser.HasCyrillic(chat.Text))
                 {
-                    // Latin-letter Russian: the translator cannot read it, so show it as typed.
-                    EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, chat.Text, null, flagged));
+                    // Latin-letter Russian: only Claude can read it. Without it, show the line as typed.
+                    var shown = chat.Text;
+                    string? typed = null;
+                    try
+                    {
+                        shown = await _translator.TranslateAsync(chat.Text, _settings.TheirLanguage, _settings.MyLanguage, ct, aiOnly: true);
+                        typed = chat.Text;
+                    }
+                    catch (TranslationFailedException)
+                    {
+                    }
+                    EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, shown, typed, flagged));
                     continue;
                 }
 
@@ -179,7 +219,7 @@ public sealed class Engine : IDisposable
             try
             {
                 message = OutgoingText.Sanitize(
-                    await _translator.TranslateAsync(typed, _settings.MyLanguage, _settings.TheirLanguage, ct));
+                    await _translator.TranslateAsync(typed, _settings.MyLanguage, _settings.TheirLanguage, ct, incoming: false));
                 SetTranslatorWorking(true);
             }
             catch (TranslationFailedException)
@@ -218,10 +258,13 @@ public sealed class Engine : IDisposable
         EntryAdded?.Invoke(new OverlayEntry(EntryKind.Mine, "You", ChatTeam.None, teamOnly, false, message, keepAsTyped ? null : typed));
     }
 
+    private string _lastRouteShown = "";
+
     private void SetTranslatorWorking(bool working)
     {
-        if (TranslatorWorking == working) return;
+        if (TranslatorWorking == working && _lastRouteShown == _translator.LastRoute) return;
         TranslatorWorking = working;
+        _lastRouteShown = _translator.LastRoute;
         StatusChanged?.Invoke();
     }
 

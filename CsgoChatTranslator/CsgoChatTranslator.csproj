@@ -13,4 +13,8 @@
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="13.5.0" />
+  </ItemGroup>
+
 </Project>
