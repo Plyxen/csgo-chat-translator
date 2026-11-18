@@ -26,10 +26,13 @@ Settings live in `%APPDATA%\CsgoChatTranslator\settings.json` (hotkey, port, ove
 | Write a message | `F8`, type, `Enter` |
 | Team chat | `Tab` in the message box |
 | Server commands | Anything starting with `!` or `/` is sent as typed |
+| Pause or resume translating | `Shift+F8`, the tray menu, or the button in **Status and setup** |
 | Move the overlay | Tray icon, **Move overlay**, drag, **Finish moving** |
 | See the Russian original | Tray icon, **Show Russian original** |
 
 If the game is not connected, the translated text is copied to the clipboard so it can be pasted into chat.
+
+Pause when you are on the server but not playing. While paused, incoming chat is not read or sent to any translator, so nothing is billed if you use a Claude key, and lines that arrive during the pause are dropped rather than translated later. Writing a message with `F8` still works.
 
 ## Translation
 

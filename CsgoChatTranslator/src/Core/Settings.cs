@@ -9,6 +9,7 @@ public sealed class Settings
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string Hotkey { get; set; } = "F8";
+    public string PauseHotkey { get; set; } = "Shift+F8";
     public int NetconPort { get; set; } = 27099;
     public string NetconPassword { get; set; } = "";
     public string TheirLanguage { get; set; } = "ru";

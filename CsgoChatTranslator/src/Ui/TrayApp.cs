@@ -3,6 +3,7 @@ namespace CsgoChatTranslator;
 public sealed class TrayApp : ApplicationContext
 {
     private const int HotkeyId = 1;
+    private const int PauseHotkeyId = 2;
 
     private readonly Settings _settings;
     private readonly Engine _engine;
@@ -13,7 +14,9 @@ public sealed class TrayApp : ApplicationContext
     private readonly Icon _icon = Theme.CreateAppIcon();
     private readonly HotkeyWindow _hotkeyWindow;
     private readonly ToolStripMenuItem _moveItem;
+    private readonly ToolStripMenuItem _pauseItem;
     private readonly bool _hotkeyRegistered;
+    private readonly bool _pauseHotkeyRegistered;
 
     public TrayApp(Settings settings, bool quiet, bool showSetup = false)
     {
@@ -28,6 +31,9 @@ public sealed class TrayApp : ApplicationContext
         _engine.CopyRequested += text => OnUi(() => CopyToClipboard(text));
         _compose.Submitted += _engine.Send;
         _status.ApiKeySubmitted += _engine.SetApiKey;
+        _status.PauseToggled += TogglePause;
+
+        _pauseItem = new ToolStripMenuItem($"Pause translating ({settings.PauseHotkey})", null, (_, _) => TogglePause());
 
         var writeItem = new ToolStripMenuItem($"Write a message ({settings.Hotkey})", null, (_, _) => _compose.Open());
         var statusItem = new ToolStripMenuItem("Status and setup", null, (_, _) => ShowStatus());
@@ -45,15 +51,21 @@ public sealed class TrayApp : ApplicationContext
         };
 
         var menu = new ContextMenuStrip();
-        menu.Items.AddRange([writeItem, statusItem, _moveItem, originalItem, new ToolStripSeparator(),
+        menu.Items.AddRange([writeItem, _pauseItem, statusItem, _moveItem, originalItem, new ToolStripSeparator(),
             new ToolStripMenuItem("Quit", null, (_, _) => Quit())]);
 
         _tray = new NotifyIcon { Icon = _icon, Text = "CS:GO Chat Translator", ContextMenuStrip = menu, Visible = true };
         _tray.DoubleClick += (_, _) => ShowStatus();
 
-        _hotkeyWindow = new HotkeyWindow(_compose.Toggle);
+        _hotkeyWindow = new HotkeyWindow(id =>
+        {
+            if (id == PauseHotkeyId) TogglePause();
+            else _compose.Toggle();
+        });
         _hotkeyRegistered = HotkeyWindow.TryParse(settings.Hotkey, out var modifiers, out var key) &&
             Native.RegisterHotKey(_hotkeyWindow.Handle, HotkeyId, modifiers | Native.MOD_NOREPEAT, key);
+        _pauseHotkeyRegistered = HotkeyWindow.TryParse(settings.PauseHotkey, out var pauseModifiers, out var pauseKey) &&
+            Native.RegisterHotKey(_hotkeyWindow.Handle, PauseHotkeyId, pauseModifiers | Native.MOD_NOREPEAT, pauseKey);
 
         _engine.Start();
         RefreshStatus();
@@ -78,7 +90,14 @@ public sealed class TrayApp : ApplicationContext
         }
     }
 
-    private void RefreshStatus() => _status.UpdateStatus(_engine, _hotkeyRegistered);
+    private void RefreshStatus()
+    {
+        _status.UpdateStatus(_engine, _hotkeyRegistered);
+        _pauseItem.Text = $"{(_engine.Paused ? "Resume" : "Pause")} translating ({_settings.PauseHotkey})";
+        _tray.Text = _engine.Paused ? "CS:GO Chat Translator (paused)" : "CS:GO Chat Translator";
+    }
+
+    private void TogglePause() => _engine.SetPaused(!_engine.Paused);
 
     private void ShowStatus()
     {
@@ -108,6 +127,7 @@ public sealed class TrayApp : ApplicationContext
     private void Quit()
     {
         if (_hotkeyRegistered) Native.UnregisterHotKey(_hotkeyWindow.Handle, HotkeyId);
+        if (_pauseHotkeyRegistered) Native.UnregisterHotKey(_hotkeyWindow.Handle, PauseHotkeyId);
         _hotkeyWindow.DestroyHandle();
         _tray.Visible = false;
         _tray.Dispose();
@@ -117,9 +137,9 @@ public sealed class TrayApp : ApplicationContext
 
     private sealed class HotkeyWindow : NativeWindow
     {
-        private readonly Action _pressed;
+        private readonly Action<int> _pressed;
 
-        public HotkeyWindow(Action pressed)
+        public HotkeyWindow(Action<int> pressed)
         {
             _pressed = pressed;
             CreateHandle(new CreateParams());
@@ -147,7 +167,7 @@ public sealed class TrayApp : ApplicationContext
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == Native.WM_HOTKEY) _pressed();
+            if (m.Msg == Native.WM_HOTKEY) _pressed(m.WParam.ToInt32());
             base.WndProc(ref m);
         }
     }

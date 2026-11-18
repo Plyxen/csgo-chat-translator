@@ -11,6 +11,10 @@ public sealed class StatusForm : Form
     private readonly TextBox _keyBox;
     private readonly Label _keyStatus;
     private DateTime _noKeyNoticeUntil;
+    private readonly Button _pauseButton;
+
+    /// <summary>The user clicked the pause / resume button.</summary>
+    public event Action? PauseToggled;
 
     /// <summary>The pasted API key, or null when the user removed it.</summary>
     public event Action<string?>? ApiKeySubmitted;
@@ -47,6 +51,11 @@ public sealed class StatusForm : Form
         _linkValue = AddRow(grid, "Sending chat");
         _translatorValue = AddRow(grid, "Translation");
         layout.Controls.Add(grid);
+
+        _pauseButton = SmallButton("Pause translating");
+        _pauseButton.Margin = new Padding(0, 0, 0, 16);
+        _pauseButton.Click += (_, _) => PauseToggled?.Invoke();
+        layout.Controls.Add(_pauseButton);
 
         layout.Controls.Add(Heading("One-time setup"));
         layout.Controls.Add(Paragraph(
@@ -114,7 +123,8 @@ public sealed class StatusForm : Form
         layout.Controls.Add(Heading("In game"));
         layout.Controls.Add(Paragraph(
             $"Press {settings.Hotkey}, type in English, and press Enter. Tab switches between all chat and team chat. " +
-            "Messages that start with ! or / are sent as typed."));
+            $"Messages that start with ! or / are sent as typed. {settings.PauseHotkey} pauses and resumes translating, " +
+            "for when you are on the server but not playing."));
 
         Controls.Add(layout);
     }
@@ -149,6 +159,13 @@ public sealed class StatusForm : Form
             false => ("The service is not answering", Theme.Error),
             null => ("Starts with the first message", Theme.Muted),
         };
+        _pauseButton.Text = engine.Paused ? "Resume translating" : "Pause translating";
+        if (engine.Paused)
+        {
+            Set(_translatorValue, "Paused. Chat is not sent to any translator and nothing is billed.", Theme.Warning);
+            return;
+        }
+
         Set(_translatorValue, hotkeyRegistered ? translatorText : $"{translatorText}. {_settings.Hotkey} is taken by another app.",
             hotkeyRegistered ? translatorColor : Theme.Error);
     }

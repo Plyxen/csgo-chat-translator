@@ -42,6 +42,22 @@ public sealed class Engine : IDisposable
     public AiState Ai => _translator.AiState;
     public string TranslatorRoute => _translator.LastRoute;
 
+    /// <summary>
+    /// While paused, incoming chat is not read, translated or sent to any service, so nothing is billed.
+    /// Writing a message with the hotkey still works, because that is a deliberate action.
+    /// </summary>
+    public bool Paused { get; private set; }
+
+    public void SetPaused(bool paused)
+    {
+        if (Paused == paused) return;
+        Paused = paused;
+        EntryAdded?.Invoke(OverlayEntry.Notice(paused
+            ? $"Translating is paused. Nothing is sent to the translator. {_settings.PauseHotkey} resumes."
+            : "Translating resumed."));
+        StatusChanged?.Invoke();
+    }
+
     /// <summary>Stores a new Claude API key (or removes it when empty) and checks it with one tiny request.</summary>
     public void SetApiKey(string? key)
     {
@@ -118,6 +134,9 @@ public sealed class Engine : IDisposable
 
     private void HandleLogLine(string line)
     {
+        // Lines that arrive while paused are dropped, not queued, so resuming never causes a burst of requests.
+        if (Paused) return;
+
         var chat = ChatParser.Parse(line);
         if (chat is null) return;
 
@@ -158,6 +177,9 @@ public sealed class Engine : IDisposable
         {
             await foreach (var chat in _incoming.Reader.ReadAllAsync(ct))
             {
+                // Anything still queued from before the pause is dropped too.
+                if (Paused) continue;
+
                 var flagged = Profanity.Describe(chat.Text);
                 if (!ChatParser.HasCyrillic(chat.Text))
                 {
