@@ -10,7 +10,7 @@ public sealed class OverlayForm : Form
     private const TextFormatFlags WrapFlags = TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.WordBreak;
 
     private sealed record Row(OverlayEntry Entry, DateTime Expires);
-    private sealed record Placed(OverlayEntry Entry, string Label, Point LabelAt, Rectangle TextBox, Rectangle OriginalBox, Rectangle FlagBox);
+    private sealed record Placed(OverlayEntry Entry, string Label, Point LabelAt, Rectangle TextBox, Rectangle OriginalBox, Rectangle FlagBox, Rectangle RuleBox);
 
     private readonly List<Row> _rows = [];
     private readonly List<Placed> _placed = [];
@@ -155,7 +155,15 @@ public sealed class OverlayForm : Form
                 y = flagBox.Bottom;
             }
 
-            _placed.Add(new Placed(entry, label, new Point(padding, textBox.Top), textBox, originalBox, flagBox));
+            var ruleBox = Rectangle.Empty;
+            if (entry.Rule is { Length: > 0 } rule)
+            {
+                var ruleSize = TextRenderer.MeasureText(rule, _smallFont, new Size(available, 0), WrapFlags);
+                ruleBox = new Rectangle(textX, y + Scale(2), available, ruleSize.Height);
+                y = ruleBox.Bottom;
+            }
+
+            _placed.Add(new Placed(entry, label, new Point(padding, textBox.Top), textBox, originalBox, flagBox, ruleBox));
             y += gap;
         }
 
@@ -185,6 +193,11 @@ public sealed class OverlayForm : Form
             if (!row.FlagBox.IsEmpty)
             {
                 TextRenderer.DrawText(g, row.Entry.Flagged, _smallFont, row.FlagBox, Theme.Warning, Theme.Background, WrapFlags);
+            }
+
+            if (!row.RuleBox.IsEmpty)
+            {
+                TextRenderer.DrawText(g, row.Entry.Rule, _smallFont, row.RuleBox, Theme.Error, Theme.Background, WrapFlags);
             }
         }
 

@@ -16,6 +16,9 @@ public sealed class StatusForm : Form
     /// <summary>The user clicked the pause / resume button.</summary>
     public event Action? PauseToggled;
 
+    /// <summary>The user asked for the message history window.</summary>
+    public event Action? HistoryRequested;
+
     /// <summary>The pasted API key, or null when the user removed it.</summary>
     public event Action<string?>? ApiKeySubmitted;
 
@@ -53,9 +56,12 @@ public sealed class StatusForm : Form
         layout.Controls.Add(grid);
 
         _pauseButton = SmallButton("Pause translating");
-        _pauseButton.Margin = new Padding(0, 0, 0, 16);
         _pauseButton.Click += (_, _) => PauseToggled?.Invoke();
-        layout.Controls.Add(_pauseButton);
+        var historyButton = SmallButton("Message history");
+        historyButton.Click += (_, _) => HistoryRequested?.Invoke();
+        var buttonRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 16) };
+        buttonRow.Controls.AddRange([_pauseButton, historyButton]);
+        layout.Controls.Add(buttonRow);
 
         layout.Controls.Add(Heading("One-time setup"));
         layout.Controls.Add(Paragraph(

@@ -5,6 +5,9 @@ namespace CsgoChatTranslator;
 
 public sealed class TranslationFailedException(string message, Exception? inner = null) : Exception(message, inner);
 
+/// <summary>A translated message, plus the server rule it breaks when Claude checked it and found one.</summary>
+public sealed record Translation(string Text, string? Rule = null);
+
 /// <summary>
 /// Uses free web translation endpoints that need no key or account. They rate-limit without warning,
 /// so there are three routes; a route that fails is skipped and the one that last worked goes first.
@@ -26,7 +29,7 @@ public sealed class Translator : IDisposable
     ];
 
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
-    private readonly Dictionary<string, string> _cache = [];
+    private readonly Dictionary<string, Translation> _cache = [];
     private volatile int _preferred;
 
     public Translator() => _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
@@ -41,15 +44,16 @@ public sealed class Translator : IDisposable
     /// <summary>True when a Claude key is set and has not been rejected.</summary>
     public bool AiReady => _ai is { Usable: true };
 
-    public void SetApiKey(string? apiKey, string model)
+    /// <param name="rules">Server rules for Claude to check players' messages against, or null to only translate.</param>
+    public void SetApiKey(string? apiKey, string model, string? rules = null)
     {
-        _ai = string.IsNullOrWhiteSpace(apiKey) ? null : new AiTranslator(apiKey, model);
+        _ai = string.IsNullOrWhiteSpace(apiKey) ? null : new AiTranslator(apiKey, model, rules);
         lock (_cache) _cache.Clear();
     }
 
     /// <param name="incoming">True for players' chat, false for the admin's own messages.</param>
     /// <param name="aiOnly">For text the free routes cannot read, such as Russian in Latin letters.</param>
-    public async Task<string> TranslateAsync(
+    public async Task<Translation> TranslateAsync(
         string text, string from, string to, CancellationToken ct, bool incoming = true, bool aiOnly = false)
     {
         var key = $"{from}>{to}:{text}";
@@ -95,7 +99,7 @@ public sealed class Translator : IDisposable
             {
                 using var response = await _http.GetAsync(route.Url(q, sl, tl), ct);
                 response.EnsureSuccessStatusCode();
-                var result = route.Parse(await response.Content.ReadAsStringAsync(ct));
+                var result = new Translation(route.Parse(await response.Content.ReadAsStringAsync(ct)));
 
                 _preferred = index;
                 LastRoute = route.Name;
@@ -111,7 +115,7 @@ public sealed class Translator : IDisposable
         throw new TranslationFailedException("No translation service answered.", last);
     }
 
-    private void Remember(string key, string result)
+    private void Remember(string key, Translation result)
     {
         lock (_cache)
         {
