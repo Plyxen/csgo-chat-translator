@@ -10,6 +10,7 @@ public sealed class TrayApp : ApplicationContext
     private readonly OverlayForm _overlay;
     private readonly ComposeForm _compose = new();
     private readonly StatusForm _status;
+    private readonly HistoryForm _history;
     private readonly NotifyIcon _tray;
     private readonly Icon _icon = Theme.CreateAppIcon();
     private readonly HotkeyWindow _hotkeyWindow;
@@ -24,19 +25,27 @@ public sealed class TrayApp : ApplicationContext
         _overlay = new OverlayForm(settings);
         _ = _overlay.Handle; // Needed before worker threads post to the UI.
         _status = new StatusForm(settings, _icon);
+        _history = new HistoryForm(_icon);
+        _ = _history.Handle;
         _engine = new Engine(settings);
 
-        _engine.EntryAdded += entry => OnUi(() => _overlay.Add(entry));
+        _engine.EntryAdded += entry => OnUi(() =>
+        {
+            _overlay.Add(entry);
+            _history.Add(entry);
+        });
         _engine.StatusChanged += () => OnUi(RefreshStatus);
         _engine.CopyRequested += text => OnUi(() => CopyToClipboard(text));
         _compose.Submitted += _engine.Send;
         _status.ApiKeySubmitted += _engine.SetApiKey;
         _status.PauseToggled += TogglePause;
+        _status.HistoryRequested += () => _history.ShowInFront();
 
         _pauseItem = new ToolStripMenuItem($"Pause translating ({settings.PauseHotkey})", null, (_, _) => TogglePause());
 
         var writeItem = new ToolStripMenuItem($"Write a message ({settings.Hotkey})", null, (_, _) => _compose.Open());
         var statusItem = new ToolStripMenuItem("Status and setup", null, (_, _) => ShowStatus());
+        var historyItem = new ToolStripMenuItem("Message history", null, (_, _) => _history.ShowInFront());
         _moveItem = new ToolStripMenuItem("Move overlay", null, (_, _) => ToggleMove());
         var originalItem = new ToolStripMenuItem("Show Russian original")
         {
@@ -50,8 +59,15 @@ public sealed class TrayApp : ApplicationContext
             _overlay.RefreshLayout();
         };
 
+        var rulesItem = new ToolStripMenuItem("Check chat against server rules")
+        {
+            Checked = settings.CheckRules,
+            CheckOnClick = true,
+        };
+        rulesItem.CheckedChanged += (_, _) => _engine.SetCheckRules(rulesItem.Checked);
+
         var menu = new ContextMenuStrip();
-        menu.Items.AddRange([writeItem, _pauseItem, statusItem, _moveItem, originalItem, new ToolStripSeparator(),
+        menu.Items.AddRange([writeItem, _pauseItem, historyItem, statusItem, _moveItem, originalItem, rulesItem, new ToolStripSeparator(),
             new ToolStripMenuItem("Quit", null, (_, _) => Quit())]);
 
         _tray = new NotifyIcon { Icon = _icon, Text = "CS:GO Chat Translator", ContextMenuStrip = menu, Visible = true };

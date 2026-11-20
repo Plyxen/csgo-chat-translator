@@ -21,6 +21,13 @@ public sealed class Settings
     public int? OverlayY { get; set; }
     public string AiModel { get; set; } = "claude-haiku-5-5";
 
+    /// <summary>With a Claude key: also say which server rule a message breaks. Costs more per message.</summary>
+    public bool CheckRules { get; set; } = true;
+
+    /// <summary>The folder that holds settings.json and rules.txt.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string DirectoryPath => Path.GetDirectoryName(_file) ?? DefaultDirectory;
+
     /// <summary>The Anthropic API key, encrypted for this Windows user. Never stored as plain text.</summary>
     public string? ApiKeyProtected { get; set; }
 

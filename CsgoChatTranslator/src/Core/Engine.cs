@@ -7,7 +7,7 @@ public enum EntryKind { Chat, Mine, Notice }
 
 public sealed record OverlayEntry(
     EntryKind Kind, string? Name, ChatTeam Team, bool TeamOnly, bool Dead, string Text, string? Original,
-    string? Flagged = null)
+    string? Flagged = null, string? Rule = null)
 {
     public static OverlayEntry Notice(string text) => new(EntryKind.Notice, null, ChatTeam.None, false, false, text, null);
 }
@@ -36,7 +36,7 @@ public sealed class Engine : IDisposable
         _settings = settings;
         _console = new GameConsole(settings.NetconPort, settings.NetconPassword);
         _console.StateChanged += () => StatusChanged?.Invoke();
-        _translator.SetApiKey(settings.GetApiKey(), settings.AiModel);
+        ApplyTranslatorSettings();
     }
 
     public AiState Ai => _translator.AiState;
@@ -62,10 +62,21 @@ public sealed class Engine : IDisposable
     public void SetApiKey(string? key)
     {
         _settings.SetApiKey(key);
-        _translator.SetApiKey(_settings.GetApiKey(), _settings.AiModel);
+        ApplyTranslatorSettings();
         StatusChanged?.Invoke();
         if (_translator.AiReady) _ = Task.Run(CheckAiAsync);
     }
+
+    /// <summary>Turns the server rule check on or off. It only works with a Claude key.</summary>
+    public void SetCheckRules(bool on)
+    {
+        _settings.CheckRules = on;
+        _settings.Save();
+        ApplyTranslatorSettings();
+    }
+
+    private void ApplyTranslatorSettings() => _translator.SetApiKey(
+        _settings.GetApiKey(), _settings.AiModel, _settings.CheckRules ? Rules.Load(_settings.DirectoryPath) : null);
 
     private async Task CheckAiAsync()
     {
@@ -186,23 +197,29 @@ public sealed class Engine : IDisposable
                     // Latin-letter Russian: only Claude can read it. Without it, show the line as typed.
                     var shown = chat.Text;
                     string? typed = null;
+                    string? latinRule = null;
                     try
                     {
-                        shown = await _translator.TranslateAsync(chat.Text, _settings.TheirLanguage, _settings.MyLanguage, ct, aiOnly: true);
+                        var latin = await _translator.TranslateAsync(chat.Text, _settings.TheirLanguage, _settings.MyLanguage, ct, aiOnly: true);
+                        shown = latin.Text;
+                        latinRule = latin.Rule;
                         typed = chat.Text;
                     }
                     catch (TranslationFailedException)
                     {
                     }
-                    EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, shown, typed, flagged));
+                    EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, shown, typed, flagged, latinRule));
                     continue;
                 }
 
                 string text;
                 string? original = chat.Text;
+                string? rule = null;
                 try
                 {
-                    text = await _translator.TranslateAsync(chat.Text, _settings.TheirLanguage, _settings.MyLanguage, ct);
+                    var translated = await _translator.TranslateAsync(chat.Text, _settings.TheirLanguage, _settings.MyLanguage, ct);
+                    text = translated.Text;
+                    rule = translated.Rule;
                     SetTranslatorWorking(true);
                 }
                 catch (TranslationFailedException)
@@ -211,7 +228,7 @@ public sealed class Engine : IDisposable
                     text = chat.Text + "  (not translated)";
                     original = null;
                 }
-                EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, text, original, flagged));
+                EntryAdded?.Invoke(new OverlayEntry(EntryKind.Chat, chat.Name, chat.Team, chat.TeamOnly, chat.Dead, text, original, flagged, rule));
             }
         }
         catch (OperationCanceledException) { }
@@ -241,7 +258,7 @@ public sealed class Engine : IDisposable
             try
             {
                 message = OutgoingText.Sanitize(
-                    await _translator.TranslateAsync(typed, _settings.MyLanguage, _settings.TheirLanguage, ct, incoming: false));
+                    (await _translator.TranslateAsync(typed, _settings.MyLanguage, _settings.TheirLanguage, ct, incoming: false)).Text);
                 SetTranslatorWorking(true);
             }
             catch (TranslationFailedException)

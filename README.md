@@ -29,6 +29,8 @@ Settings live in `%APPDATA%\CsgoChatTranslator\settings.json` (hotkey, port, ove
 | Pause or resume translating | `Shift+F8`, the tray menu, or the button in **Status and setup** |
 | Move the overlay | Tray icon, **Move overlay**, drag, **Finish moving** |
 | See the Russian original | Tray icon, **Show Russian original** |
+| Message history | Tray icon, **Message history**, or the button in **Status and setup**. Every line since the app started, untranslated and translated |
+| Server rule hints | Tray icon, **Check chat against server rules** (needs a Claude key) |
 
 If the game is not connected, the translated text is copied to the clipboard so it can be pasted into chat.
 
@@ -52,6 +54,7 @@ If you want better translations, paste an Anthropic API key under **Better trans
 - Insults stay as rude as they were written.
 - Russian typed in Latin letters (`privet kak dela`) is translated, not only flagged.
 - Your own messages come out in natural player Russian.
+- Messages that clearly break a server rule get a red line naming the rule and its penalty. The rules are in `%APPDATA%\CsgoChatTranslator\rules.txt` and can be edited. It is a hint from one message without context, so the decision stays yours. Sending the rules with every line makes each message cost several times more; switch it off in the tray menu if you do not want it.
 
 It uses the pay-as-you-go Anthropic API, not a Claude subscription. A chat line costs roughly $0.00004 and takes under a second, so a few dollars of prepaid credit lasts months. The key is stored encrypted for your Windows user in the settings file, outside this repository (or read from `ANTHROPIC_API_KEY`).
 
